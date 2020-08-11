@@ -325,7 +325,7 @@ function get_tweet($tweet_id, $force=false, $user=null) {
   }
 
   // get the tweet
-  $tweet = twitter_api("/statuses/show", array("id" => $tweet_id));
+  $tweet = twitter_api("/statuses/show", array("id" => $tweet_id, "tweet_mode" => "extended"));
   if (isset($tweet["error"]) || isset($tweet["errors"])) {
     if (in_array($tweet["errors"][0]["code"], array(179,34))) {
       // 179: Sorry, you are not authorized to see this status.
@@ -355,7 +355,7 @@ function parse_tweet($tweet) {
     "tweet_id" => $tweet["id_str"],
     "user"     => $tweet["user"]["screen_name"],
     "date"     => strtotime($tweet["created_at"]),
-    "text"     => unscramble_text($tweet["text"]),
+    "text"     => unscramble_text($tweet["full_text"]),
   );
 
   $entities = $tweet["entities"]["urls"];
@@ -406,7 +406,11 @@ function parse_tweet($tweet) {
         }
       }
     }
-    $t["text"] = str_replace($entity["url"], $expanded_url, $t["text"]);
+    $t["text"] = str_replace($entity["url"], $expanded_url, $t["text"], $count);
+    if ($count == 0 && strpos($t["text"], $expanded_url) === false) {
+      // URL not included in the text, so append it.
+      $t["text"] = $t["text"] . " " . $expanded_url;
+    }
   }
 
   return $t;
@@ -547,7 +551,7 @@ function process_tweet($t) {
       }
 
       // embed video.twimg
-      if ($host == "video.twimg.com" && $paths[0] == "ext_tw_video") {
+      if ($host == "video.twimg.com" && ($paths[0] == "ext_tw_video" || $paths[0] == "tweet_video")) {
         $t["embeds"][] = array("<iframe width=\"640\" height=\"530\" src=\"$expanded_url\" frameborder=\"0\" scrolling=\"no\" allowfullscreen></iframe>", "video");
       }
 
@@ -642,7 +646,7 @@ function process_tweet($t) {
       $t["embeds"][] = array("<iframe width=\"853\" height=\"$height\" src=\"https://w.soundcloud.com/player/?url=$embed_url\" frameborder=\"0\" scrolling=\"no\" allowfullscreen></iframe>", "audio");
     }
 
-    return "<a href=\"$expanded_url\" title=\"$url\" rel=\"noreferrer\">$expanded_url</a>";
+    return "<br><a href=\"$expanded_url\" title=\"$url\" rel=\"noreferrer\">$expanded_url</a>";
   }, $t["text"]);
 
   // embed Spotify plain text uri
@@ -706,6 +710,7 @@ $query = array(
   "screen_name" => $user,
   "count" => 200, // max 200
   "include_rts" => true, // include retweets
+  "tweet_mode" => "extended", // full size tweets
   #"max_id" => "31053515254140928",
   #"trim_user" => true,
   #"exclude_replies" => true,
